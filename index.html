@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Performance Predictor</title>
+
+  <!-- Chart.js draws the charts from the metrics returned by FastAPI. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* Simple colors used throughout the page. */
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #101820;
+      color: #f4f7fa;
+      font-family: Arial, sans-serif;
+    }
+
+    /* Keep the page readable on wide screens. */
+    main {
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    h1, h2, h3 { margin-top: 0; }
+    h1 { color: #43dfc1; }
+    p, .hint { color: #b7c2cc; }
+
+    /* Cards hold related information and forms. */
+    .card {
+      background: #1b2732;
+      border: 1px solid #344552;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+
+    /* Put model scores and the two forms next to each other on wide screens. */
+    .two-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .score { color: #43dfc1; font-size: 30px; font-weight: bold; }
+
+    /* Arrange form fields in two neat columns. */
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    label { display: block; color: #b7c2cc; font-size: 13px; }
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 5px;
+      padding: 10px;
+      border: 1px solid #526371;
+      border-radius: 6px;
+      background: #101820;
+      color: white;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 14px;
+      padding: 12px;
+      border: 0;
+      border-radius: 6px;
+      background: #43dfc1;
+      color: #10202a;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .result { min-height: 22px; margin-top: 14px; color: #43dfc1; }
+    .error { color: #ff9b9b; }
+    progress { width: 100%; height: 14px; accent-color: #43dfc1; }
+
+    /* Give each chart enough room to be readable. */
+    .chart { height: 280px; }
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      max-width: 500px;
+      margin: auto;
+    }
+    .matrix div {
+      padding: 18px;
+      border-radius: 6px;
+      background: #263744;
+      text-align: center;
+    }
+    .matrix strong { display: block; margin-top: 6px; font-size: 24px; }
+
+    /* Stack the columns on smaller screens. */
+    @media (max-width: 700px) {
+      body { padding: 14px; }
+      .two-columns { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Customer Performance Predictor</h1>
+      <p>Estimate customer spending and predict offer responses.</p>
+      <p id="api-status">Connecting to the backend...</p>
+    </header>
+
+    <!-- These two cards show the test scores saved by train.py. -->
+    <section class="two-columns">
+      <div class="card">
+        <h2>Spending Model R-squared</h2>
+        <div class="score" id="r2-score">—</div>
+      </div>
+      <div class="card">
+        <h2>Offer Model Accuracy</h2>
+        <div class="score" id="accuracy-score">—</div>
+      </div>
+    </section>
+
+    <!-- Each form sends the same nine customer features to a different model. -->
+    <section class="two-columns">
+      <form class="card" id="spending-form">
+        <h2>Spending Predictor</h2>
+        <div class="fields">
+          <label>Income<input name="Income" type="number" value="58138" required></label>
+          <label>Age<input name="Age" type="number" value="57" required></label>
+          <label>Children<input name="Children" type="number" value="0" required></label>
+          <label>Recency<input name="Recency" type="number" value="58" required></label>
+          <label>Web purchases<input name="NumWebPurchases" type="number" value="8" required></label>
+          <label>Catalog purchases<input name="NumCatalogPurchases" type="number" value="10" required></label>
+          <label>Store purchases<input name="NumStorePurchases" type="number" value="4" required></label>
+          <label>Monthly web visits<input name="NumWebVisitsMonth" type="number" value="7" required></label>
+          <label>Deal purchases<input name="NumDealsPurchases" type="number" value="3" required></label>
+        </div>
+        <button type="submit">Predict total spend</button>
+        <div class="result" id="spending-result"></div>
+      </form>
+
+      <form class="card" id="response-form">
+        <h2>Offer Response Predictor</h2>
+        <div class="fields">
+          <label>Income<input name="Income" type="number" value="58138" required></label>
+          <label>Age<input name="Age" type="number" value="57" required></label>
+          <label>Children<input name="Children" type="number" value="0" required></label>
+          <label>Recency<input name="Recency" type="number" value="58" required></label>
+          <label>Web purchases<input name="NumWebPurchases" type="number" value="8" required></label>
+          <label>Catalog purchases<input name="NumCatalogPurchases" type="number" value="10" required></label>
+          <label>Store purchases<input name="NumStorePurchases" type="number" value="4" required></label>
+          <label>Monthly web visits<input name="NumWebVisitsMonth" type="number" value="7" required></label>
+          <label>Deal purchases<input name="NumDealsPurchases" type="number" value="3" required></label>
+        </div>
+        <button type="submit">Predict offer response</button>
+        <div class="result" id="response-result"></div>
+      </form>
+    </section>
+
+    <!-- The following charts use values from the /metrics endpoint. -->
+    <h2>Model Charts</h2>
+    <section class="two-columns">
+      <div class="card">
+        <h3>Classification Scores</h3>
+        <div class="chart"><canvas id="scores-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Actual and Predicted Spending</h3>
+        <div class="chart"><canvas id="spending-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Offer Response Classes</h3>
+        <div class="chart"><canvas id="class-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Feature Coefficients</h3>
+        <div class="chart"><canvas id="coefficient-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Confusion Matrix</h3>
+        <div class="matrix" id="confusion-matrix"></div>
+        <p class="hint">Rows are actual classes; columns are predicted classes.</p>
+      </div>
+    </section>
+
+    <p class="hint">The API must be running for predictions and charts to load.</p>
+  </main>
+
+  <script>
+    // FastAPI's local address. Change this if you run the backend elsewhere.
+    const API = "http://127.0.0.1:8000";
+
+    // These names and their order must match train.py and main.py.
+    const featureNames = [
+      "Income", "Age", "Children", "Recency", "NumWebPurchases",
+      "NumCatalogPurchases", "NumStorePurchases", "NumWebVisitsMonth",
+      "NumDealsPurchases"
+    ];
+
+    // Read the nine input values from one form and turn them into numbers.
+    function readCustomer(form) {
+      const customer = {};
+      for (const name of featureNames) {
+        customer[name] = Number(form.elements[name].value);
+      }
+      return customer;
+    }
+
+    // Send one customer's data to an API route and show the response.
+    async function predict(formId, resultId, route) {
+      const form = document.getElementById(formId);
+      const result = document.getElementById(resultId);
+      const button = form.querySelector("button");
+      button.disabled = true;
+      button.textContent = "Please wait...";
+      result.className = "result";
+
+      try {
+        const reply = await fetch(API + route, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(readCustomer(form))
+        });
+        if (!reply.ok) throw new Error("The API could not process these values.");
+        const answer = await reply.json();
+
+        if (route.includes("regression")) {
+          result.textContent = "Predicted total spend: " +
+            answer.predicted_total_spend.toFixed(2);
+        } else {
+          const chance = (answer.probability * 100).toFixed(1);
+          result.innerHTML = answer.label + " — " + chance + "% chance of accepting" +
+            "<br><progress max=\"100\" value=\"" + chance + "\"></progress>";
+        }
+      } catch (error) {
+        result.textContent = "Could not contact the backend. Start it with: uvicorn main:app --reload";
+        result.className = "result error";
+      }
+
+      button.disabled = false;
+      button.textContent = formId === "spending-form"
+        ? "Predict total spend" : "Predict offer response";
+    }
+
+    // Connect the spending form to the regression prediction route.
+    document.getElementById("spending-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      predict("spending-form", "spending-result", "/predict/regression");
+    });
+
+    // Connect the response form to the classification prediction route.
+    document.getElementById("response-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      predict("response-form", "response-result", "/predict/classification");
+    });
+
+    // Download the saved evaluation scores and draw all five visuals.
+    fetch(API + "/metrics")
+      .then(function (reply) {
+        if (!reply.ok) throw new Error("Metrics could not be loaded.");
+        return reply.json();
+      })
+      .then(function (metrics) {
+        document.getElementById("api-status").textContent = "Backend connected";
+        document.getElementById("r2-score").textContent = metrics.r2.toFixed(3);
+        document.getElementById("accuracy-score").textContent = metrics.accuracy.toFixed(3);
+
+        // Draw accuracy, precision, recall, F1, and ROC-AUC as a bar chart.
+        new Chart(document.getElementById("scores-chart"), {
+          type: "bar",
+          data: {
+            labels: ["Accuracy", "Precision", "Recall", "F1", "ROC-AUC"],
+            datasets: [{
+              data: [metrics.accuracy, metrics.precision, metrics.recall, metrics.f1, metrics.roc_auc],
+              backgroundColor: "#43dfc1"
+            }]
+          },
+          options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 1 } }, plugins: { legend: { display: false } } }
+        });
+
+        // Draw one dot for each saved actual-versus-predicted spend value.
+        new Chart(document.getElementById("spending-chart"), {
+          type: "scatter",
+          data: { datasets: [{
+            label: "Customers",
+            data: metrics.actual_vs_predicted.map(function (row) {
+              return { x: row.actual, y: row.predicted };
+            }),
+            backgroundColor: "#43dfc1"
+          }] },
+          options: { maintainAspectRatio: false, scales: {
+            x: { title: { display: true, text: "Actual" } },
+            y: { title: { display: true, text: "Predicted" } }
+          } }
+        });
+
+        // Compare how many customers accepted or did not accept the offer.
+        new Chart(document.getElementById("class-chart"), {
+          type: "doughnut",
+          data: {
+            labels: ["Did not accept", "Accepted"],
+            datasets: [{
+              data: [metrics.response_distribution["0"], metrics.response_distribution["1"]],
+              backgroundColor: ["#627487", "#43dfc1"]
+            }]
+          },
+          options: { maintainAspectRatio: false }
+        });
+
+        // Compare absolute coefficients; the two models use different scales.
+        new Chart(document.getElementById("coefficient-chart"), {
+          type: "bar",
+          data: {
+            labels: featureNames,
+            datasets: [
+              { label: "Spending model", data: featureNames.map(function (name) { return Math.abs(metrics.linear_coefficients[name]); }), backgroundColor: "#43dfc1" },
+              { label: "Offer model", data: featureNames.map(function (name) { return Math.abs(metrics.logistic_coefficients[name]); }), backgroundColor: "#a58bfa" }
+            ]
+          },
+          options: { indexAxis: "y", maintainAspectRatio: false }
+        });
+
+        // Show the 2-by-2 confusion matrix with its class labels.
+        const matrix = metrics.confusion_matrix;
+        document.getElementById("confusion-matrix").innerHTML =
+          "<div>Actual 0, predicted 0<strong>" + matrix[0][0] + "</strong></div>" +
+          "<div>Actual 0, predicted 1<strong>" + matrix[0][1] + "</strong></div>" +
+          "<div>Actual 1, predicted 0<strong>" + matrix[1][0] + "</strong></div>" +
+          "<div>Actual 1, predicted 1<strong>" + matrix[1][1] + "</strong></div>";
+      })
+      .catch(function () {
+        document.getElementById("api-status").textContent = "Backend is not running";
+      });
+  </script>
+</body>
+</html>
